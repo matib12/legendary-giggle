@@ -1,7 +1,7 @@
 ---
 name: Feature proposal
 about: Suggest improvement or new educational example
-title: ''
+title: "[Feature] Short descriptive title"
 labels: enhancement
 assignees: ''
 
