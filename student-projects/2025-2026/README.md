@@ -14,13 +14,14 @@ Projects in this directory:
 ## Structure
 
 Each project should have its own subfolder:
-
+```
 project-name/
 ├── README.md
 ├── src/
 ├── data/ (if applicable)
 ├── requirements.txt or environment.yml
 └── report.md (optional)
+```
 
 ## Requirements
 
