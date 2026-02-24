@@ -282,7 +282,7 @@ void geometry_and_physics_aau_15() {
 	Double_t step=0.31; //strip width in cm
 	Double_t stepA=0.155; //strip width in cm for 32 strip detectors (A group)
 	
-	Int_t ninc=1e07; //pps
+	Int_t ninc=1e09; //pps
 	
 	Double_t ntar=1; //atoms per mbarn. 100=target thickness in ug/cm2
 	
