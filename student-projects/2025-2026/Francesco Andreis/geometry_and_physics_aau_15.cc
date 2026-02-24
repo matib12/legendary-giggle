@@ -59,9 +59,7 @@ TVector3 ToBeamFrame(const TVector3& v,
 }
 
 void geometry_and_physics_aau_15() {
-	
-	// TApplication theApp("App", NULL, NULL);
-	
+
 	gStyle->SetPalette(1);
 	
 	gSystem->Load("libPhysics.so");
@@ -1749,9 +1747,6 @@ void geometry_and_physics_aau_15() {
 	fout->Close();
 	fhisto->Write();
 	fhisto->Close();
-	
-	
-	// theApp.Run();
 	
 	cout << "Finished" << endl;
 	
