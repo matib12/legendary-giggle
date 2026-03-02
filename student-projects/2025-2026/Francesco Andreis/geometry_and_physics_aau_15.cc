@@ -1751,3 +1751,8 @@ void geometry_and_physics_aau_15() {
 	cout << "Finished" << endl;
 	
 }
+
+int main() {
+    geometry_and_physics_aau_15();
+    return 0;
+}
