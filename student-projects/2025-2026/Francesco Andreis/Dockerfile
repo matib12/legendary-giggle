@@ -1,4 +1,4 @@
-FROM rootproject/root:6.34.08
+FROM rootproject/root:6.34.00-ubuntu24.10
 
 WORKDIR /app
 
