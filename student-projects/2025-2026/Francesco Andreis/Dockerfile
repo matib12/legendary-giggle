@@ -3,12 +3,8 @@ FROM rootproject/root:6.34.00-ubuntu24.10
 
 WORKDIR /app
 
-# Copia il codice nel container
-COPY geometry_and_physics_aau_15.cpp .
+# Copia tutto il contenuto della repository nel container
+COPY . /app
 
-# Compila con ROOT
-RUN g++ -O2 geometry_and_physics_aau_15.cpp -o sim \
-    $(root-config --cflags --libs)
-
-# Esegui il programma
-CMD ["./sim"]
+# Esegui il programma compilato con ACLiC
+CMD ["root", "-l", "-b", "-q", "geometry_and_physics_aau_15.cc+"]
