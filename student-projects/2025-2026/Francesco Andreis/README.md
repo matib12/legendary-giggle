@@ -9,10 +9,10 @@ I file di uscita contengono un TTree che per ogni evento specifica energia e ang
 ## Run with Docker (ROOT 6.34.08)
 
 Build the image:
-docker build -t aau_sim .
+docker build -t aau15-root634
 
 Run the simulation:
-docker run --rm -v $PWD:/app aau_sim
+docker run --rm -it -v $(pwd):/app aau15-root634
 
 ## Output
 Il programma produce:
