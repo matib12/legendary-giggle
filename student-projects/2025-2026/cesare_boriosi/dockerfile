@@ -1,0 +1,18 @@
+# BASE image
+FROM python:3.11-slim
+
+# Install scientific packages
+RUN pip install --no-cache-dir numpy pandas scipy matplotlib scikit-learn
+
+# Create working directory
+WORKDIR /app
+
+# Copy script & training dataset
+COPY s_point_w.py .
+COPY Full_PBE.pkl .
+
+# Create a irectory for the results
+RUN mkdir /data
+
+# Comando per avviare lo script
+CMD ["python", "s_point_w.py"]
