@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir numpy scipy matplotlib
+
+# For matplotlib to display plots without a display server
+ENV MPLBACKEND=TkAgg
+
+COPY scat_ang_CM_for_diatomics.py .
+
+CMD ["python", "scat_ang_CM_for_diatomics.py"]
