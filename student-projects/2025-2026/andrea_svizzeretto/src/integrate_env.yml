@@ -1,0 +1,12 @@
+name: integrate_env
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python core
+  - python
+  - numpy
+  - pip
+  - matplotlib
+  
