@@ -12,7 +12,7 @@ Build the image:
 docker build -t aau15-root634
 
 Run the simulation:
-docker run --rm -it -v $(pwd):/app aau15-root634
+docker run --rm -it -v "$(pwd)":/app aau15-root634
 
 ## Output
 Il programma produce:
