@@ -2,8 +2,8 @@
 name: Bug report
 about: Create a report to help us improve
 title: "[BUG] Short descriptive title"
-labels: bug
-assignees: ''
+labels: bug, course core
+assignees: matib12
 
 ---
 
