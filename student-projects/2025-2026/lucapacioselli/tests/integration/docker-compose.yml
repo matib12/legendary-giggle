@@ -1,0 +1,42 @@
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb-test
+    ports:
+      - "18086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: test-user
+      DOCKER_INFLUXDB_INIT_PASSWORD: test-password-123
+      DOCKER_INFLUXDB_INIT_ORG: test-org
+      DOCKER_INFLUXDB_INIT_BUCKET: test-bucket
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: test-token
+    healthcheck:
+      test: ["CMD", "influx", "ping", "--host", "http://localhost:8086"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  influxdb-seed:
+    image: influxdb:2.7
+    container_name: influxdb-seed
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    volumes:
+      - ./dummy_data.lp:/seed/dummy_data.lp:ro
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        for i in $(seq 1 30); do
+          influx write \
+            --host http://influxdb:8086 \
+            --token test-token \
+            --org test-org \
+            --bucket test-bucket \
+            --precision s \
+            --file /seed/dummy_data.lp && break
+          sleep 2
+        done

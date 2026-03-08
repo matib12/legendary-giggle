@@ -1,0 +1,5 @@
+{
+    "influx_url": "http://<influx_url>:<influx_port>",
+    "org": "<your-org-name>",
+    "token": "<your-api-token-here>"
+}

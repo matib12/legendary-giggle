@@ -1,0 +1,11 @@
+# Ignore the real configuration and real query parameters files
+*.json
+# Ignore the output CSV files
+*.csv
+
+# Ignore the pycache directory
+__pycache__
+
+# Keep template/config examples in the repository
+!config.json.template
+!queries/params.json.template

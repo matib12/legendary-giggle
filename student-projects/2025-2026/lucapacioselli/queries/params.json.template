@@ -1,0 +1,9 @@
+{
+    "bucket": "<bucket_name>",
+    "start": "",
+    "stop": "",
+    "measurement": "<measurement_name>",
+    "field": "<field_name>",
+    "extra_filters": [ "r['<tag_name>'] == '<tag_value>'", "r['<tag2_name>'] == '<tag2_value>'" ],
+    "aggregate": "aggregateWindow(every: <time_interval>, fn: <function_name>, createEmpty: false)"
+}
