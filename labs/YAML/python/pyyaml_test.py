@@ -1,6 +1,6 @@
 import yaml
 
-with open("labs/YASML/python/simulation.yaml", "r") as f:
+with open("labs/YAML/python/simulation.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 length = config["cavity"]["length"]
