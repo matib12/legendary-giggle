@@ -58,8 +58,84 @@ TVector3 ToBeamFrame(const TVector3& v,
 				return TVector3(v.Dot(ex), v.Dot(ey), v.Dot(ez));
 }
 
-void geometry_and_physics_aau_15() {
+// Struttura di supporto per restituire tutti i dati utili del colpo calcolato
+struct HitData {
+				double Ta;
+				double Pa;
+				double cos_TA;
+				int iii;        // Indice della strip frontale
+				int jjj;        // Indice della strip posteriore
+				TVector3 vbina; // Direzione apparente della particella
+};
 
+HitData ProcessDetectorHit(
+				TVector3 vhp, TVector3 vCenter, TGeoRotation* rot,
+				int numStrips, double step, TRandom3* ran,
+				TVector3 beamOrigin, TVector3 ex_beam, TVector3 ey_beam, TVector3 ez_beam,
+				double normalY, double directionSignX)
+{
+				HitData result;
+				double deg = 180. / TMath::Pi();
+				
+				// 1. Trasformazione nel sistema locale
+				TVector3 vd = vhp - vCenter;
+				double vvd[3] = {vd(0), vd(1), vd(2)};
+				double vvdr[3] = {0., 0., 0.};
+				rot->MasterToLocal(vvd, vvdr);
+				
+				// 2. Ricerca del pixel (front e back)
+				int ii = 0, jj = 0;
+				for (ii = 0; ii < numStrips; ii++) {
+								double limit1 = directionSignX < 0 ? (-2.48 + ii * step) : (2.48 - ii * step);
+								double limit2 = directionSignX < 0 ? (-2.48 + (ii + 1) * step) : (2.48 - (ii + 1) * step);
+								
+								if (directionSignX < 0) {
+												if (vvdr[0] >= limit1 && vvdr[0] < limit2) break;
+								} else {
+												if (vvdr[0] < limit1 && vvdr[0] >= limit2) break;
+								}
+				}
+				for (jj = 0; jj < numStrips; jj++) {
+								if (vvdr[2] >= -2.48 + jj * step && vvdr[2] < -2.48 + (jj + 1) * step) break;
+				}
+				
+				// 3. Randomizzazione all'interno del pixel
+				double cf = directionSignX < 0 ? (-2.48 + ii * step + step * ran->Rndm()) : (2.48 - ii * step - step * ran->Rndm());
+				double cb = -2.48 + jj * step + step * ran->Rndm();
+				
+				// Salviamo gli indici delle strip per gli istogrammi
+				result.iii = ii;
+				result.jjj = jj;
+				
+				// 4. Ritorno alle coordinate globali (apparenti)
+				double avdr[3] = {cf, vvdr[1], cb};
+				double avd[3] = {0., 0., 0.};
+				double avdN[3] = {0., normalY, 0.};
+				double avN[3] = {0., 0., 0.};
+				
+				rot->LocalToMaster(avdr, avd);
+				rot->LocalToMaster(avdN, avN);
+				
+				// 5. Calcolo cinematica finale
+				TVector3 vhit = vCenter + TVector3(avd[0], avd[1], avd[2]);
+				TVector3 vbin_lab = vhit - beamOrigin;
+				TVector3 vbin = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
+				
+				result.Ta = vbin.Theta() * deg;
+				result.Pa = vbin.Phi() * deg;
+				result.vbina = vbin; // Salviamo la direzione per lo smearing
+				
+				TVector3 ubin = vbin.Unit();
+				TVector3 ubinN = ToBeamFrame(TVector3(avN[0], avN[1], avN[2]), ex_beam, ey_beam, ez_beam).Unit();
+				result.cos_TA = ubinN.Dot(ubin);
+				
+				return result;
+}
+
+void geometry_and_physics_aau_15() {
+	
+	// TApplication theApp("App", NULL, NULL);
+	
 	gStyle->SetPalette(1);
 	
 	gSystem->Load("libPhysics.so");
@@ -396,8 +472,7 @@ void geometry_and_physics_aau_15() {
 	}
 	
 	
-	
-	Int_t iii,jjj;
+	Int_t iii=0,jjj=0;
 	
 	//fired events
 	Int_t nnfired=0;
@@ -415,7 +490,7 @@ void geometry_and_physics_aau_15() {
 	TGenPhaseSpace event;
 	
 	fout->cd();
-	
+
 	for (int nfired=1; nfired<=ninc; nfired++) {
 		
 		nnfired++;
@@ -566,1189 +641,137 @@ void geometry_and_physics_aau_15() {
 		//vector momenta (parte spaziale del 4-momentum)
 		TVector3 ppb1;
 		TVector3 ppb2;
-		
-		
-		
-		// I detect the 4He particle only
-		
-		if(istate1 == 1) {
-			
-			ngood++;
-			
-			
-			if( idnode1==idnode2 )
-				{
-				nmulth++;
-				}
-			
-			//searching for 4He apparent trajectory
-	
-			if      (idnode1==idA1) {
-				//cout << "4He in A1" << endl;
-				TVector3 vdA1=vhp1-vA1;
-				//vector from det. A1 center to hit point
-				
-				Double_t vvdA1[3]={vdA1(0),vdA1(1),vdA1(2)};
-				Double_t vvdA1r[3]={0.,0.,0.};
-				
-				//cout << vdA1(0) << " " << vdA1(1) << " " << vdA1(2) << " " << vdA1.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot1->MasterToLocal(vvdA1,vvdA1r);
-				//for A1, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdA1r(vvdA1r[0],vvdA1r[1],vvdA1r[2]);
-				
-				//cout << vdA1r(0) << " " << vdA1r(1) << " " << vdA1r(2) << " " << vdA1r.Mag() << endl;
-				
-				Double_t detA1f=vvdA1r[0];
-				Double_t detA1b=vvdA1r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA1f>=-2.48+ii*stepA && detA1f<-2.48+(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA1b>=-2.48+jj*stepA && detA1b<-2.48+(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA1=-2.48+ii*stepA+stepA*rxxs;
-				Double_t cbA1=-2.48+jj*stepA+stepA*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector A1
-				Double_t avdA1r[3]={cfA1,vvdA1r[1],cbA1};
-				Double_t avdA1[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,-1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot1->LocalToMaster(avdA1r,avdA1);
-				rot1->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.A1 center to apparent hit point
-				TVector3 vdA1a(avdA1[0],avdA1[1],avdA1[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdA1a(0) << " " << vdA1a(1) << " " << vdA1a(2) << " " << vdA1a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vA1+vdA1a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinA1 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinA1.Theta())*deg;
-				Pa=(vbinA1.Phi())*deg;
-				vbina=vbinA1;
-				TVector3 ubinA1=vbinA1.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinA1);
-				ALflag=1;
-			}
-			
-			else if (idnode1==idA2) {
-				//cout << "4He in A2" << endl;
-				TVector3 vdA2=vhp1-vA2;
-				//vector from det. A2 center to hit point
-				
-				Double_t vvdA2[3]={vdA2(0),vdA2(1),vdA2(2)};
-				Double_t vvdA2r[3]={0.,0.,0.};
-				
-				//cout << vdA2(0) << " " << vdA2(1) << " " << vdA2(2) << " " << vdA2.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot2->MasterToLocal(vvdA2,vvdA2r);
-				//for A2, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdA2r(vvdA2r[0],vvdA2r[1],vvdA2r[2]);
-				
-				//cout << vdA2r(0) << " " << vdA2r(1) << " " << vdA2r(2) << " " << vdA2r.Mag() << endl;
-				
-				Double_t detA2f=vvdA2r[0];
-				Double_t detA2b=vvdA2r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA2f>=-2.48+ii*stepA && detA2f<-2.48+(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA2b>=-2.48+jj*stepA && detA2b<-2.48+(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA2=-2.48+ii*stepA+stepA*rxxs;
-				Double_t cbA2=-2.48+jj*stepA+stepA*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector A2
-				Double_t avdA2r[3]={cfA2,vvdA2r[1],cbA2};
-				Double_t avdA2[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,-1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot2->LocalToMaster(avdA2r,avdA2);
-				rot2->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.A2 center to apparent hit point
-				TVector3 vdA2a(avdA2[0],avdA2[1],avdA2[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdA2a(0) << " " << vdA2a(1) << " " << vdA2a(2) << " " << vdA2a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vA2+vdA2a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinA2 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinA2.Theta())*deg;
-				Pa=(vbinA2.Phi())*deg;
-				vbina=vbinA2;
-				TVector3 ubinA2=vbinA2.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinA2);
-				ADflag=1;
-			}
-			
-			else if (idnode1==idA3) {
-				//cout << "4He in A3" << endl;
-				TVector3 vdA3=vhp1-vA3;
-				//vector from det. A3 center to hit point
-				
-				Double_t vvdA3[3]={vdA3(0),vdA3(1),vdA3(2)};
-				Double_t vvdA3r[3]={0.,0.,0.};
-				
-				//cout << vdA3(0) << " " << vdA3(1) << " " << vdA3(2) << " " << vdA3.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot3->MasterToLocal(vvdA3,vvdA3r);
-				//for A3, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdA3r(vvdA3r[0],vvdA3r[1],vvdA3r[2]);
-				
-				//cout << vdA3r(0) << " " << vdA3r(1) << " " << vdA3r(2) << " " << vdA3r.Mag() << endl;
-				
-				Double_t detA3f=vvdA3r[0];
-				Double_t detA3b=vvdA3r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA3f<2.48-ii*stepA && detA3f>=2.48-(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA3b>=-2.48+jj*stepA && detA3b<-2.48+(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA3=2.48-ii*stepA-stepA*rxxs;
-				Double_t cbA3=-2.48+jj*stepA+stepA*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector A3
-				Double_t avdA3r[3]={cfA3,vvdA3r[1],cbA3};
-				Double_t avdA3[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot3->LocalToMaster(avdA3r,avdA3);
-				rot3->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.A3 center to apparent hit point
-				TVector3 vdA3a(avdA3[0],avdA3[1],avdA3[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdA3a(0) << " " << vdA3a(1) << " " << vdA3a(2) << " " << vdA3a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vA3+vdA3a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinA3 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinA3.Theta())*deg;
-				Pa=(vbinA3.Phi())*deg;
-				vbina=vbinA3;
-				TVector3 ubinA3=vbinA3.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinA3);
-				ARflag=1;
-			}
-			
-			else if (idnode1==idA4) {
-				//cout << "4He in A4" << endl;
-				TVector3 vdA4=vhp1-vA4;
-				//vector from det. A4 center to hit point
-				
-				Double_t vvdA4[3]={vdA4(0),vdA4(1),vdA4(2)};
-				Double_t vvdA4r[3]={0.,0.,0.};
-				
-				//cout << vdA4(0) << " " << vdA4(1) << " " << vdA4(2) << " " << vdA4.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot4->MasterToLocal(vvdA4,vvdA4r);
-				//for A4, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdA4r(vvdA4r[0],vvdA4r[1],vvdA4r[2]);
-				
-				//cout << vdA4r(0) << " " << vdA4r(1) << " " << vdA4r(2) << " " << vdA4r.Mag() << endl;
-				
-				Double_t detA4f=vvdA4r[0];
-				Double_t detA4b=vvdA4r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA4f<2.48-ii*stepA && detA4f>=2.48-(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA4b>=-2.48+jj*stepA && detA4b<-2.48+(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA4=2.48-ii*stepA-stepA*rxxs;
-				Double_t cbA4=-2.48+jj*stepA+stepA*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector A4
-				Double_t avdA4r[3]={cfA4,vvdA4r[1],cbA4};
-				Double_t avdA4[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot4->LocalToMaster(avdA4r,avdA4);
-				rot4->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.A4 center to apparent hit point
-				TVector3 vdA4a(avdA4[0],avdA4[1],avdA4[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdA4a(0) << " " << vdA4a(1) << " " << vdA4a(2) << " " << vdA4a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vA4+vdA4a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinA4 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinA4.Theta())*deg;
-				Pa=(vbinA4.Phi())*deg;
-				vbina=vbinA4;
-				TVector3 ubinA4=vbinA4.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinA4);
-				AUflag=1;
-				
-			}
-			
-			else if (idnode1==idB1) {
-				//cout << "4He in B1" << endl;
-				TVector3 vdB1=vhp1-vB1;
-				//vector from det. B1 center to hit point
-				
-				Double_t vvdB1[3]={vdB1(0),vdB1(1),vdB1(2)};
-				Double_t vvdB1r[3]={0.,0.,0.};
-				
-				//cout << vdB1(0) << " " << vdB1(1) << " " << vdB1(2) << " " << vdB1.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot5->MasterToLocal(vvdB1,vvdB1r);
-				//for B1, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdB1r(vvdB1r[0],vvdB1r[1],vvdB1r[2]);
-				
-				//cout << vdB1r(0) << " " << vdB1r(1) << " " << vdB1r(2) << " " << vdB1r.Mag() << endl;
-				
-				Double_t detB1f=vvdB1r[0];
-				Double_t detB1b=vvdB1r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB1f>=-2.48+ii*step && detB1f<-2.48+(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB1b>=-2.48+jj*step && detB1b<-2.48+(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB1=-2.48+ii*step+step*rxxs;
-				Double_t cbB1=-2.48+jj*step+step*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector B1
-				Double_t avdB1r[3]={cfB1,vvdB1r[1],cbB1};
-				Double_t avdB1[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot5->LocalToMaster(avdB1r,avdB1);
-				rot5->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.B1 center to apparent hit point
-				TVector3 vdB1a(avdB1[0],avdB1[1],avdB1[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdB1a(0) << " " << vdB1a(1) << " " << vdB1a(2) << " " << vdB1a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vB1+vdB1a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinB1 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinB1.Theta())*deg;
-				Pa=(vbinB1.Phi())*deg;
-				vbina=vbinB1;
-				TVector3 ubinB1=vbinB1.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinB1);
-				BLflag=1;
-			}
-			
-			else if (idnode1==idB2) {
-				//cout << "4He in B2" << endl;
-				TVector3 vdB2=vhp1-vB2;
-				//vector from det. B2 center to hit point
-				
-				Double_t vvdB2[3]={vdB2(0),vdB2(1),vdB2(2)};
-				Double_t vvdB2r[3]={0.,0.,0.};
-				
-				//cout << vdB2(0) << " " << vdB2(1) << " " << vdB2(2) << " " << vdB2.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot6->MasterToLocal(vvdB2,vvdB2r);
-				//for B2, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdB2r(vvdB2r[0],vvdB2r[1],vvdB2r[2]);
-				
-				//cout << vdB2r(0) << " " << vdB2r(1) << " " << vdB2r(2) << " " << vdB2r.Mag() << endl;
-				
-				Double_t detB2f=vvdB2r[0];
-				Double_t detB2b=vvdB2r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB2f>=-2.48+ii*step && detB2f<-2.48+(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB2b>=-2.48+jj*step && detB2b<-2.48+(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB2=-2.48+ii*step+step*rxxs;
-				Double_t cbB2=-2.48+jj*step+step*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector B2
-				Double_t avdB2r[3]={cfB2,vvdB2r[1],cbB2};
-				Double_t avdB2[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot6->LocalToMaster(avdB2r,avdB2);
-				rot6->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.B2 center to apparent hit point
-				TVector3 vdB2a(avdB2[0],avdB2[1],avdB2[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdB2a(0) << " " << vdB2a(1) << " " << vdB2a(2) << " " << vdB2a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vB2+vdB2a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinB2 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinB2.Theta())*deg;
-				Pa=(vbinB2.Phi())*deg;
-				vbina=vbinB2;
-				TVector3 ubinB2=vbinB2.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinB2);
-				BDflag=1;
-			}
-			
-			else if (idnode1==idB3) {
-				//cout << "4He in B3" << endl;
-				TVector3 vdB3=vhp1-vB3;
-				//vector from det. B3 center to hit point
-				
-				Double_t vvdB3[3]={vdB3(0),vdB3(1),vdB3(2)};
-				Double_t vvdB3r[3]={0.,0.,0.};
-				
-				//cout << vdB3(0) << " " << vdB3(1) << " " << vdB3(2) << " " << vdB3.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot7->MasterToLocal(vvdB3,vvdB3r);
-				//for B3, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdB3r(vvdB3r[0],vvdB3r[1],vvdB3r[2]);
-				
-				//cout << vdB3r(0) << " " << vdB3r(1) << " " << vdB3r(2) << " " << vdB3r.Mag() << endl;
-				
-				Double_t detB3f=vvdB3r[0];
-				Double_t detB3b=vvdB3r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB3f<2.48-ii*step && detB3f>=2.48-(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB3b>=-2.48+jj*step && detB3b<-2.48+(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB3=2.48-ii*step-step*rxxs;
-				Double_t cbB3=-2.48+jj*step+step*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector B3
-				Double_t avdB3r[3]={cfB3,vvdB3r[1],cbB3};
-				Double_t avdB3[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,-1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot7->LocalToMaster(avdB3r,avdB3);
-				rot7->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.B3 center to apparent hit point
-				TVector3 vdB3a(avdB3[0],avdB3[1],avdB3[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdB3a(0) << " " << vdB3a(1) << " " << vdB3a(2) << " " << vdB3a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vB3+vdB3a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinB3 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinB3.Theta())*deg;
-				Pa=(vbinB3.Phi())*deg;
-				vbina=vbinB3;
-				TVector3 ubinB3=vbinB3.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinB3);
-				BRflag=1;
-			}
-			
-			else if (idnode1==idB4) {
-				//cout << "4He in B4" << endl;
-				TVector3 vdB4=vhp1-vB4;
-				//vector from det. B4 center to hit point
-				
-				Double_t vvdB4[3]={vdB4(0),vdB4(1),vdB4(2)};
-				Double_t vvdB4r[3]={0.,0.,0.};
-				
-				//cout << vdB4(0) << " " << vdB4(1) << " " << vdB4(2) << " " << vdB4.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot8->MasterToLocal(vvdB4,vvdB4r);
-				//for B4, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdB4r(vvdB4r[0],vvdB4r[1],vvdB4r[2]);
-				
-				//cout << vdB4r(0) << " " << vdB4r(1) << " " << vdB4r(2) << " " << vdB4r.Mag() << endl;
-				
-				Double_t detB4f=vvdB4r[0];
-				Double_t detB4b=vvdB4r[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB4f<2.48-ii*step && detB4f>=2.48-(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB4b>=-2.48+jj*step && detB4b<-2.48+(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB4=2.48-ii*step-step*rxxs;
-				Double_t cbB4=-2.48+jj*step+step*ryys;
-				
-				iii=ii;
-				jjj=jj;
-				
-				//binned (apparent->a) position on detector B4
-				Double_t avdB4r[3]={cfB4,vvdB4r[1],cbB4};
-				Double_t avdB4[3]={0.,0.,0.};
-				Double_t avdN[3]={0.,-1.,0.};
-				Double_t avN[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot8->LocalToMaster(avdB4r,avdB4);
-				rot8->LocalToMaster(avdN,avN);
-				
-				//this is the vector from det.B4 center to apparent hit point
-				TVector3 vdB4a(avdB4[0],avdB4[1],avdB4[2]);
-				TVector3 vdN(avN[0],avN[1],avN[2]);
-				
-				//cout << vdB4a(0) << " " << vdB4a(1) << " " << vdB4a(2) << " " << vdB4a.Mag() << endl;
-				
-				//apparent trajectory of 4He
-				TVector3 vhit=vB4+vdB4a;		// punto di hit globale
-				TVector3 vbin_lab = vhit - beamOrigin;   // direzione reale dalla reazione
-				TVector3 vbinB4 = ToBeamFrame(vbin_lab, ex_beam, ey_beam, ez_beam);
-				Ta=(vbinB4.Theta())*deg;
-				Pa=(vbinB4.Phi())*deg;
-				vbina=vbinB4;
-				TVector3 ubinB4=vbinB4.Unit();
-				TVector3 ubinN=ToBeamFrame(vdN, ex_beam, ey_beam, ez_beam).Unit();
-				cos_TA=ubinN.Dot(ubinB4);
-				BUflag=1;
-			}
-			
-			else{
-				// cout << "4He lost in space" << endl;
-				lost1flag=1;
-				lost4Hes++;
-			}
-			
-			
-			
-			
-			//searching for 197Au apparent trajectory
-	/*
-			if      (idnode2==idA1){
-				//cout << "197Au in A1" << endl;
-				TVector3 vdA1x=vhp2-vA1;
-				//vector from det. A1 center to hit point
-				
-				Double_t vvdA1x[3]={vdA1x(0),vdA1x(1),vdA1x(2)};
-				Double_t vvdA1xr[3]={0.,0.,0.};
-				
-				//cout << vdA1x(0) << " " << vdA1x(1) << " " << vdA1x(2) << " " << vdA1x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot1->MasterToLocal(vvdA1x,vvdA1xr);
-				//for A1, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdA1xr(vvdA1xr[0],vvdA1xr[1],vvdA1xr[2]);
-				
-				//cout << vdA1xr(0) << " " << vdA1xr(1) << " " << vdA1xr(2) << " " << vdA1xr.Mag() << endl;
-				
-				Double_t detA1xf=vvdA1xr[0];
-				Double_t detA1xb=vvdA1xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA1xf>=-2.48+ii*stepA && detA1xf<-2.48+(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA1xb<2.48-jj*stepA && detA1xb>=2.48-(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA1x=-2.48+ii*stepA+stepA*rxxs;
-				Double_t cbA1x=2.48-jj*stepA-stepA*ryys;
-				
-				//binned (apparent->a) position on detector A1
-				Double_t avdA1xr[3]={cfA1x,vvdA1xr[1],cbA1x};
-				Double_t avdA1x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot1->LocalToMaster(avdA1xr,avdA1x);
-				
-				//this is the vector from det.A1 center to apparent hit point
-				TVector3 vdA1xa(avdA1x[0],avdA1x[1],avdA1x[2]);
-				
-				//cout << vdA1xa(0) << " " << vdA1xa(1) << " " << vdA1xa(2) << " " << vdA1xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinA1x=vA1+vdA1xa;
-				Tau=(vbinA1x.Theta())*deg;
-				Pau=(vbinA1x.Phi())*deg;
-				vbinAu=vbinA1x;
-				
-			}
-			else if (idnode2==idA2) {
-				//cout << "197Au in A2" << endl;
-				TVector3 vdA2x=vhp2-vA2;
-				//vector from det. A2 center to hit point
-				
-				Double_t vvdA2x[3]={vdA2x(0),vdA2x(1),vdA2x(2)};
-				Double_t vvdA2xr[3]={0.,0.,0.};
-				
-				//cout << vdA2x(0) << " " << vdA2x(1) << " " << vdA2x(2) << " " << vdA2x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot2->MasterToLocal(vvdA2x,vvdA2xr);
-				//for A2, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdA2xr(vvdA2xr[0],vvdA2xr[1],vvdA2xr[2]);
-				
-				//cout << vdA2xr(0) << " " << vdA2xr(1) << " " << vdA2xr(2) << " " << vdA2xr.Mag() << endl;
-				
-				Double_t detA2xf=vvdA2xr[0];
-				Double_t detA2xb=vvdA2xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA2xf>=-2.48+ii*stepA && detA2xf<-2.48+(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA2xb<2.48-jj*stepA && detA2xb>=2.48-(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA2x=-2.48+ii*stepA+stepA*rxxs;
-				Double_t cbA2x=2.48-jj*stepA-stepA*ryys;
-				
-				//binned (apparent->a) position on detector A2
-				Double_t avdA2xr[3]={cfA2x,vvdA2xr[1],cbA2x};
-				Double_t avdA2x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot2->LocalToMaster(avdA2xr,avdA2x);
-				
-				//this is the vector from det.A2 center to apparent hit point
-				TVector3 vdA2xa(avdA2x[0],avdA2x[1],avdA2x[2]);
-				
-				//cout << vdA2xa(0) << " " << vdA2xa(1) << " " << vdA2xa(2) << " " << vdA2xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinA2x=vA2+vdA2xa;
-				Tau=(vbinA2x.Theta())*deg;
-				Pau=(vbinA2x.Phi())*deg;
-				vbinAu=vbinA2x;
-				
-			}
-			else if (idnode2==idA3) {
-				//cout << "197Au in A3" << endl;
-				TVector3 vdA3x=vhp2-vA3;
-				//vector from det. A3 center to hit point
-				
-				Double_t vvdA3x[3]={vdA3x(0),vdA3x(1),vdA3x(2)};
-				Double_t vvdA3xr[3]={0.,0.,0.};
-				
-				//cout << vdA3x(0) << " " << vdA3x(1) << " " << vdA3x(2) << " " << vdA3x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot3->MasterToLocal(vvdA3x,vvdA3xr);
-				//for A3, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdA3xr(vvdA3xr[0],vvdA3xr[1],vvdA3xr[2]);
-				
-				//cout << vdA3xr(0) << " " << vdA3xr(1) << " " << vdA3xr(2) << " " << vdA3xr.Mag() << endl;
-				
-				Double_t detA3xf=vvdA3xr[0];
-				Double_t detA3xb=vvdA3xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA3xf<2.48-ii*stepA && detA3xf>=2.48-(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA3xb<2.48-jj*stepA && detA3xb>=2.48-(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA3x=2.48-ii*stepA-stepA*rxxs;
-				Double_t cbA3x=2.48-jj*stepA-stepA*ryys;
-				
-				//binned (apparent->a) position on detector A3
-				Double_t avdA3xr[3]={cfA3x,vvdA3xr[1],cbA3x};
-				Double_t avdA3x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot3->LocalToMaster(avdA3xr,avdA3x);
-				
-				//this is the vector from det.A3 center to apparent hit point
-				TVector3 vdA3xa(avdA3x[0],avdA3x[1],avdA3x[2]);
-				
-				//cout << vdA3xa(0) << " " << vdA3xa(1) << " " << vdA3xa(2) << " " << vdA3xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinA3x=vA3+vdA3xa;
-				Tau=(vbinA3x.Theta())*deg;
-				Pau=(vbinA3x.Phi())*deg;
-				vbinAu=vbinA3x;
-				
-			}
-			else if (idnode2==idA4) {
-				//cout << "197Au in A4" << endl;
-				TVector3 vdA4x=vhp2-vA4;
-				//vector from det. A4 center to hit point
-				
-				Double_t vvdA4x[3]={vdA4x(0),vdA4x(1),vdA4x(2)};
-				Double_t vvdA4xr[3]={0.,0.,0.};
-				
-				//cout << vdA4x(0) << " " << vdA4x(1) << " " << vdA4x(2) << " " << vdA4x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot4->MasterToLocal(vvdA4x,vvdA4xr);
-				//for A4, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdA4xr(vvdA4xr[0],vvdA4xr[1],vvdA4xr[2]);
-				
-				//cout << vdA4xr(0) << " " << vdA4xr(1) << " " << vdA4xr(2) << " " << vdA4xr.Mag() << endl;
-				
-				Double_t detA4xf=vvdA4xr[0];
-				Double_t detA4xb=vvdA4xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<32; ii++){
-					if(detA4xf<2.48-ii*stepA && detA4xf>=2.48-(ii+1)*stepA) break;
-				}
-				for (jj=0; jj<32; jj++){
-					if(detA4xb<2.48-jj*stepA && detA4xb>=2.48-(jj+1)*stepA) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfA4x=2.48-ii*stepA-stepA*rxxs;
-				Double_t cbA4x=2.48-jj*stepA-stepA*ryys;
-				
-				//binned (apparent->a) position on detector A4
-				Double_t avdA4xr[3]={cfA4x,vvdA4xr[1],cbA4x};
-				Double_t avdA4x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot4->LocalToMaster(avdA4xr,avdA4x);
-				
-				//this is the vector from det.A4 center to apparent hit point
-				TVector3 vdA4xa(avdA4x[0],avdA4x[1],avdA4x[2]);
-				
-				//cout << vdA4xa(0) << " " << vdA4xa(1) << " " << vdA4xa(2) << " " << vdA4xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinA4x=vA4+vdA4xa;
-				Tau=(vbinA4x.Theta())*deg;
-				Pau=(vbinA4x.Phi())*deg;
-				vbinAu=vbinA4x;
-				
-			}
-			else if (idnode2==idB1) {
-				//cout << "197Au in B1" << endl;
-				TVector3 vdB1x=vhp2-vB1;
-				//vector from det. B1 center to hit point
-				
-				Double_t vvdB1x[3]={vdB1x(0),vdB1x(1),vdB1x(2)};
-				Double_t vvdB1xr[3]={0.,0.,0.};
-				
-				//cout << vdB1x(0) << " " << vdB1x(1) << " " << vdB1x(2) << " " << vdB1x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot5->MasterToLocal(vvdB1x,vvdB1xr);
-				//for B1, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdB1xr(vvdB1xr[0],vvdB1xr[1],vvdB1xr[2]);
-				
-				//cout << vdB1xr(0) << " " << vdB1xr(1) << " " << vdB1xr(2) << " " << vdB1xr.Mag() << endl;
-				
-				Double_t detB1xf=vvdB1xr[0];
-				Double_t detB1xb=vvdB1xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB1xf>=-2.48+ii*step && detB1xf<-2.48+(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB1xb<2.48-jj*step && detB1xb>=2.48-(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB1x=-2.48+ii*step+step*rxxs;
-				Double_t cbB1x=2.48-jj*step-step*ryys;
-				
-				//binned (apparent->a) position on detector B1
-				Double_t avdB1xr[3]={cfB1x,vvdB1xr[1],cbB1x};
-				Double_t avdB1x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot5->LocalToMaster(avdB1xr,avdB1x);
-				
-				//this is the vector from det.B1 center to apparent hit point
-				TVector3 vdB1xa(avdB1x[0],avdB1x[1],avdB1x[2]);
-				
-				//cout << vdB1xa(0) << " " << vdB1xa(1) << " " << vdB1xa(2) << " " << vdB1xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinB1x=vB1+vdB1xa;
-				Tau=(vbinB1x.Theta())*deg;
-				Pau=(vbinB1x.Phi())*deg;
-				vbinAu=vbinB1x;
-				
-			}
-			else if (idnode2==idB2) {
-				//cout << "197Au in B2" << endl;
-				TVector3 vdB2x=vhp2-vB2;
-				//vector from det. B2 center to hit point
-				
-				Double_t vvdB2x[3]={vdB2x(0),vdB2x(1),vdB2x(2)};
-				Double_t vvdB2xr[3]={0.,0.,0.};
-				
-				//cout << vdB2x(0) << " " << vdB2x(1) << " " << vdB2x(2) << " " << vdB2x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot6->MasterToLocal(vvdB2x,vvdB2xr);
-				//for B2, B1 +largeZ, B16 -largeZ
-				//        F1 -largeX, F16 +largeX
-				
-				TVector3 vdB2xr(vvdB2xr[0],vvdB2xr[1],vvdB2xr[2]);
-				
-				//cout << vdB2xr(0) << " " << vdB2xr(1) << " " << vdB2xr(2) << " " << vdB2xr.Mag() << endl;
-				
-				Double_t detB2xf=vvdB2xr[0];
-				Double_t detB2xb=vvdB2xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB2xf>=-2.48+ii*step && detB2xf<-2.48+(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB2xb<2.48-jj*step && detB2xb>=2.48-(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB2x=-2.48+ii*step+step*rxxs;
-				Double_t cbB2x=2.48-jj*step-step*ryys;
-				
-				//binned (apparent->a) position on detector B2
-				Double_t avdB2xr[3]={cfB2x,vvdB2xr[1],cbB2x};
-				Double_t avdB2x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot6->LocalToMaster(avdB2xr,avdB2x);
-				
-				//this is the vector from det.B2 center to apparent hit point
-				TVector3 vdB2xa(avdB2x[0],avdB2x[1],avdB2x[2]);
-				
-				//cout << vdB2xa(0) << " " << vdB2xa(1) << " " << vdB2xa(2) << " " << vdB2xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinB2x=vB2+vdB2xa;
-				Tau=(vbinB2x.Theta())*deg;
-				Pau=(vbinB2x.Phi())*deg;
-				vbinAu=vbinB2x;
-				
-			}
-			else if (idnode2==idB3) {
-				//cout << "197Au in B3" << endl;
-				TVector3 vdB3x=vhp2-vB3;
-				//vector from det. B3 center to hit point
-				
-				Double_t vvdB3x[3]={vdB3x(0),vdB3x(1),vdB3x(2)};
-				Double_t vvdB3xr[3]={0.,0.,0.};
-				
-				//cout << vdB3x(0) << " " << vdB3x(1) << " " << vdB3x(2) << " " << vdB3x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot7->MasterToLocal(vvdB3x,vvdB3xr);
-				//for B3, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdB3xr(vvdB3xr[0],vvdB3xr[1],vvdB3xr[2]);
-				
-				//cout << vdB3xr(0) << " " << vdB3xr(1) << " " << vdB3xr(2) << " " << vdB3xr.Mag() << endl;
-				
-				Double_t detB3xf=vvdB3xr[0];
-				Double_t detB3xb=vvdB3xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB3xf<2.48-ii*step && detB3xf>=2.48-(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB3xb<2.48-jj*step && detB3xb>=2.48-(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB3x=2.48-ii*step-step*rxxs;
-				Double_t cbB3x=2.48-jj*step-step*ryys;
-				
-				//binned (apparent->a) position on detector B3
-				Double_t avdB3xr[3]={cfB3x,vvdB3xr[1],cbB3x};
-				Double_t avdB3x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot7->LocalToMaster(avdB3xr,avdB3x);
-				
-				//this is the vector from det.B3 center to apparent hit point
-				TVector3 vdB3xa(avdB3x[0],avdB3x[1],avdB3x[2]);
-				
-				//cout << vdB3xa(0) << " " << vdB3xa(1) << " " << vdB3xa(2) << " " << vdB3xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinB3x=vB3+vdB3xa;
-				Tau=(vbinB3x.Theta())*deg;
-				Pau=(vbinB3x.Phi())*deg;
-				vbinAu=vbinB3x;
-				
-			}
-			else if (idnode2==idB4) {
-				//cout << "197Au in B4" << endl;
-				TVector3 vdB4x=vhp2-vB4;
-				//vector from det. B4 center to hit point
-				
-				Double_t vvdB4x[3]={vdB4x(0),vdB4x(1),vdB4x(2)};
-				Double_t vvdB4xr[3]={0.,0.,0.};
-				
-				//cout << vdB4x(0) << " " << vdB4x(1) << " " << vdB4x(2) << " " << vdB4x.Mag() << endl;
-				
-				//this is the transformation to planar configuration
-				rot8->MasterToLocal(vvdB4x,vvdB4xr);
-				//for B4, B1 +largeZ, B16 -largeZ
-				//        F1 +largeX, F16 -largeX
-				
-				TVector3 vdB4xr(vvdB4xr[0],vvdB4xr[1],vvdB4xr[2]);
-				
-				//cout << vdB4xr(0) << " " << vdB4xr(1) << " " << vdB4xr(2) << " " << vdB4xr.Mag() << endl;
-				
-				Double_t detB4xf=vvdB4xr[0];
-				Double_t detB4xb=vvdB4xr[2];
-				
-				Int_t ii,jj;
-				
-				//search for the pixel f->front, b->back
-				for (ii=0; ii<16; ii++){
-					if(detB4xf<2.48-ii*step && detB4xf>=2.48-(ii+1)*step) break;
-				}
-				for (jj=0; jj<16; jj++){
-					if(detB4xb<2.48-jj*step && detB4xb>=2.48-(jj+1)*step) break;
-				}
-				Double_t rxxs = ran->Rndm();
-				Double_t ryys = ran->Rndm();
-				Double_t cfB4x=2.48-ii*step-step*rxxs;
-				Double_t cbB4x=2.48-jj*step-step*ryys;
-				
-				//binned (apparent->a) position on detector B4
-				Double_t avdB4xr[3]={cfB4x,vvdB4xr[1],cbB4x};
-				Double_t avdB4x[3]={0.,0.,0.};
-				
-				//we go back to the real position in the space
-				rot8->LocalToMaster(avdB4xr,avdB4x);
-				
-				//this is the vector from det.B4 center to apparent hit point
-				TVector3 vdB4xa(avdB4x[0],avdB4x[1],avdB4x[2]);
-				
-				//cout << vdB4xa(0) << " " << vdB4xa(1) << " " << vdB4xa(2) << " " << vdB4xa.Mag() << endl;
-				
-				//apparent trajectory of 197Au
-				TVector3 vbinB4x=vB4+vdB4xa;
-				Tau=(vbinB4x.Theta())*deg;
-				Pau=(vbinB4x.Phi())*deg;
-				vbinAu=vbinB4x;
-				
-			}
-			else{
-				//cout << "197Au lost in space" << endl;
-				
-				lost2flag=1;
-			}
-			
-			*/
-			
-			//associating the energy accounting for det. res.
-			
-			std::default_random_engine generator;
-			
-			if(lost1flag==0)
-				{
-				
-				Double_t e1=(p1->Energy()-u*m1); //4He energy in GeV
-				Double_t mp1=pp1.Mag(); //4He momentum in GeV/c
-				std::random_device rd1;
-				std::mt19937 generator(rd1());
-				std::normal_distribution<double> distribution1(/*mean=*/mp1, /*stddev=*/0.0001*mp1);
-				Double_t mp1s = distribution1(generator);
-				Double_t dmp1=(mp1s-mp1)/mp1; //variazione percentuale dell'impulso
-				TVector3 dirb1=vbina.Unit(); //apparent direction
-				TVector3 vpb1=mp1s*dirb1; //4He momentum (vector) in GeV/c
-				
-				pb1.SetPx(vpb1(0));
-				pb1.SetPy(vpb1(1));
-				pb1.SetPz(vpb1(2));
-				pb1.SetE(u*m1+e1*(1+2*dmp1));
-				ppb1=pb1.Vect();
-				
-				// Ea=e1*(1+2*dmp1)*1000.;
-				Eapp=e1*(1+2*dmp1)*1000.; //detected energy of 4He if we negliect energy losses
-				
-				Double_t epm=1000.*ep;
-				
-				testvar=funcl(zp,zt,epm,Ta_true,rm);
-				Wcps=weight*ntar*funcl(zp,zt,epm,Ta_true,rm);
-				// Wcps=1.;
-				
-					// energy loss in half target of 197Au
-					R1=(aAu*Eapp*Eapp+bAu*Eapp+cAu)-(thickness/cos(Ta_true));
-					E1=(-bAu+sqrt(bAu*bAu-4*aAu*(cAu-R1)))/(2*aAu);
-					// cout << "R1: " << R1 << endl;
-					// cout << "E1: " << E1 << endl;
-					
-					// energy loss in 0.3um Al in dead layer
-					R2=(aAl*E1*E1+bAl*E1+cAl)-(0.3/cos_TA);
-					E2=(-bAl+sqrt(bAl*bAl-4*aAl*(cAl-R2)))/(2*aAl);
-					// cout << "R2: " << R2 << endl;
-					// cout << "E2: " << E2 << endl;
-					
-					// energy loss in 0.5um Si in dead layer
-					R3=(aSi*E2*E2+bSi*E2+cSi)-(0.5/cos_TA);
-					E3=(-bSi+sqrt(bSi*bSi-4*aSi*(cSi-R3)))/(2*aSi);
-					// cout << "R2: " << R2 << endl;
-					// cout << "E2: " << E2 << endl;
-					
-					Ea=E3;
-				
-				
-				if      (idnode1==idA1) {
-					AF[3][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else if (idnode1==idA2) {
-					AF[1][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else if (idnode1==idA3) {
-					AF[2][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else if (idnode1==idA4) {
-					AF[0][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else if (idnode1==idB1) {
-					BF[3][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else if (idnode1==idB2) {
-					BF[1][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else if (idnode1==idB3) {
-					BF[2][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else if (idnode1==idB4) {
-					BF[0][iii][jjj]->Fill(Ea, Wcps);
-				}
-				else{
-					cout << "panic" << endl;
-				}
-				}
-			
-			/*
-			
-			if(lost2flag==0)
-				{
-				
-				Double_t e2=(p2->Energy()-u*m2); //197Au energy in GeV
-				Double_t mp2=pp2.Mag(); //197Au momentum in GeV/c
-				std::random_device rd2;
-				std::mt19937 generator(rd2());
-				std::normal_distribution<double> distribution2(mp2, 0.0025*mp2);
-				Double_t mp2s = distribution2(generator);
-				Double_t dmp2=(mp2s-mp2)/mp2; //variazione percentuale dell'impulso
-				TVector3 dirb2=vbinAu.Unit(); //apparent direction
-				TVector3 vpb2=mp2s*dirb2; //197Au momentum (vector) in GeV/c
-				
-				pb2.SetPx(vpb2(0));
-				pb2.SetPy(vpb2(1));
-				pb2.SetPz(vpb2(2));
-				pb2.SetE(u*m2+e2*(1+2*dmp2));
-				ppb2=pb2.Vect();
-				Eau=e2*(1+2*dmp2)*1000.; //detected energy of 197Au
-				
-				fhisto->cd();
-				h2_t_p_Au->Fill(Pau,Tau,weight);
-				h2_e_t_Au->Fill(Eau,Tau,weight);
-				
-				h2_t_p_Au_w->Fill(Pau,Tau,Wcps);
-				h2_e_t_Au_w->Fill(Eau,Tau,Wcps);
-				}
-			
-			if(lost2flag==1)
-				{
-				Eau=0;
-				Tau=0;
-				Pau=0;
-				}
-			*/
-			
-			fout->cd();
-			sim->Fill();
-			
-			
-			if(nnfired%50000==0) cout << nnfired << " " << Wcps << " " << testvar << " " << (180/3.141592654)*Ta_true << " " << weight << endl;
-			
-		}
-		
-	}
-	
-	cout << "good events = " << ngood << "     multihit = " << nmulth << "     # proj. = " << nnfired << endl;
-	
-	fout->cd();
-	
-	sim->Write();
-	
-	fout->Write();
-	
-	fhisto->cd();
-	
-	for (int a=0;a<4;a++) {
-		for (int b=0;b<32;b++){
-			for(int c=0;c<32;c++){
-				AF[a][b][c]->Write();
-			}
-		}
-	}
-	
-	for (int a=0;a<4;a++) {
-		for (int b=0;b<16;b++){
-			for(int c=0;c<16;c++){
-				BF[a][b][c]->Write();
-			}
-		}
-	}
-	
-	
-	fout->Close();
-	fhisto->Write();
-	fhisto->Close();
-	
-	cout << "Finished" << endl;
-	
-}
 
+									// I detect the 4He particle only
+									if(istate1 == 1) {
+													
+													ngood++;
+													if(idnode1 == idnode2) {
+																	nmulth++;
+													}
+													
+													int lost1flag = 0;
+													HitData res; // Creiamo una singola variabile per accogliere i risultati
+													
+													// ==================================================
+													// IDENTIFICAZIONE DEL RIVELATORE
+													// ==================================================
+													if      (idnode1 == idA1) { res = ProcessDetectorHit(vhp1, vA1, rot1, 32, stepA, ran, beamOrigin, ex_beam, ey_beam, ez_beam, -1.0, -1.0); ALflag = 1; }
+													else if (idnode1 == idA2) { res = ProcessDetectorHit(vhp1, vA2, rot2, 32, stepA, ran, beamOrigin, ex_beam, ey_beam, ez_beam, -1.0, -1.0); ADflag = 1; }
+													else if (idnode1 == idA3) { res = ProcessDetectorHit(vhp1, vA3, rot3, 32, stepA, ran, beamOrigin, ex_beam, ey_beam, ez_beam,  1.0,  1.0); ARflag = 1; }
+													else if (idnode1 == idA4) { res = ProcessDetectorHit(vhp1, vA4, rot4, 32, stepA, ran, beamOrigin, ex_beam, ey_beam, ez_beam,  1.0,  1.0); AUflag = 1; }
+													else if (idnode1 == idB1) { res = ProcessDetectorHit(vhp1, vB1, rot5, 16, step,  ran, beamOrigin, ex_beam, ey_beam, ez_beam,  1.0, -1.0); BLflag = 1; }
+													else if (idnode1 == idB2) { res = ProcessDetectorHit(vhp1, vB2, rot6, 16, step,  ran, beamOrigin, ex_beam, ey_beam, ez_beam,  1.0, -1.0); BDflag = 1; }
+													else if (idnode1 == idB3) { res = ProcessDetectorHit(vhp1, vB3, rot7, 16, step,  ran, beamOrigin, ex_beam, ey_beam, ez_beam, -1.0,  1.0); BRflag = 1; }
+													else if (idnode1 == idB4) { res = ProcessDetectorHit(vhp1, vB4, rot8, 16, step,  ran, beamOrigin, ex_beam, ey_beam, ez_beam, -1.0,  1.0); BUflag = 1; }
+													else {
+																	// Se la particella non colpisce nessun rivelatore noto
+																	lost1flag = 1;
+																	lost4Hes++;
+													}
+
+													// ==================================================
+													// ENERGIA, SMEARING E RIEMPIMENTO ISTOGRAMMI
+													// ==================================================
+													if (lost1flag == 0) {
+																	// Estraiamo i dati dalla nostra struttura per comodità
+																	Ta = res.Ta;
+																	Pa = res.Pa;
+																	cos_TA = res.cos_TA;
+																	iii = res.iii;
+																	jjj = res.jjj;
+																	vbina = res.vbina;
+
+																	Double_t e1 = (p1->Energy() - u * m1); // 4He energy in GeV
+																	Double_t mp1 = pp1.Mag(); // 4He momentum in GeV/c
+																	
+																	// Smearing della risoluzione (usando random C++11)
+																	std::random_device rd1;
+																	std::mt19937 generator(rd1());
+																	std::normal_distribution<double> distribution1(mp1, 0.0001 * mp1);
+																	Double_t mp1s = distribution1(generator);
+																	Double_t dmp1 = (mp1s - mp1) / mp1; // variazione percentuale dell'impulso
+																	
+																	TVector3 dirb1 = vbina.Unit(); // apparent direction
+																	TVector3 vpb1 = mp1s * dirb1; // 4He momentum (vector) in GeV/c
+																	
+																	pb1.SetPx(vpb1(0));
+																	pb1.SetPy(vpb1(1));
+																	pb1.SetPz(vpb1(2));
+																	pb1.SetE(u * m1 + e1 * (1 + 2 * dmp1));
+																	ppb1 = pb1.Vect();
+																	
+																	Eapp = e1 * (1 + 2 * dmp1) * 1000.; // detected energy in MeV
+																	Double_t epm = 1000. * ep;
+																	
+																	testvar = funcl(zp, zt, epm, Ta_true, rm);
+																	Wcps = weight * ntar * funcl(zp, zt, epm, Ta_true, rm);
+																	
+																	// Calcolo perdite di energia nei vari strati
+																	R1 = (aAu * Eapp * Eapp + bAu * Eapp + cAu) - (thickness / cos(Ta_true));
+																	E1 = (-bAu + sqrt(bAu * bAu - 4 * aAu * (cAu - R1))) / (2 * aAu);
+																	
+																	R2 = (aAl * E1 * E1 + bAl * E1 + cAl) - (0.3 / cos_TA);
+																	E2 = (-bAl + sqrt(bAl * bAl - 4 * aAl * (cAl - R2))) / (2 * aAl);
+																	
+																	R3 = (aSi * E2 * E2 + bSi * E2 + cSi) - (0.5 / cos_TA);
+																	E3 = (-bSi + sqrt(bSi * bSi - 4 * aSi * (cSi - R3))) / (2 * aSi);
+																	
+																	Ea = E3;
+																	
+																	// Riempimento degli array di istogrammi in base al rivelatore colpito
+																	if      (idnode1 == idA1) AF[3][iii][jjj]->Fill(Ea, Wcps);
+																	else if (idnode1 == idA2) AF[1][iii][jjj]->Fill(Ea, Wcps);
+																	else if (idnode1 == idA3) AF[2][iii][jjj]->Fill(Ea, Wcps);
+																	else if (idnode1 == idA4) AF[0][iii][jjj]->Fill(Ea, Wcps);
+																	else if (idnode1 == idB1) BF[3][iii][jjj]->Fill(Ea, Wcps);
+																	else if (idnode1 == idB2) BF[1][iii][jjj]->Fill(Ea, Wcps);
+																	else if (idnode1 == idB3) BF[2][iii][jjj]->Fill(Ea, Wcps);
+																	else if (idnode1 == idB4) BF[0][iii][jjj]->Fill(Ea, Wcps);
+																	else {
+																					cout << "panic: rivelatore sconosciuto nel riempimento istogrammi" << endl;
+																	}
+													} // fine if lost1flag == 0
+
+													// Salvataggio sul file TTree
+													fout->cd();
+													sim->Fill();
+													
+													// Stampa di controllo ogni 50.000 eventi
+													if (nnfired % 50000 == 0) {
+																	cout << nnfired << " " << Wcps << " " << testvar << " " << (180 / 3.141592654) * Ta_true << " " << weight << endl;
+													}
+									}
+					} // FINE CICLO FOR PRINCIPALE
+					
+					// ==================================================
+					// SALVATAGGIO FINALE E CHIUSURA FILE
+					// ==================================================
+					cout << "good events = " << ngood << "     multihit = " << nmulth << "     # proj. = " << nnfired << endl;
+					
+					fout->cd();
+					sim->Write();
+					fout->Write();
+					
+					fhisto->cd();
+					for (int a = 0; a < 4; a++) {
+									for (int b = 0; b < 32; b++) {
+													for(int c = 0; c < 32; c++) {
+																	AF[a][b][c]->Write();
+													}
+									}
+					}
+					for (int a = 0; a < 4; a++) {
+									for (int b = 0; b < 16; b++) {
+													for(int c = 0; c < 16; c++) {
+																	BF[a][b][c]->Write();
+													}
+									}
+					}
+					
+					fout->Close();
+					fhisto->Write();
+					fhisto->Close();
+					
+					cout << "Finished" << endl;
+	}
