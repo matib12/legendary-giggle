@@ -1,0 +1,6 @@
+cavity:
+  length: 3.0
+  finesse: 450
+laser:
+  wavelength: 1064e-9
+  power: 1.0
