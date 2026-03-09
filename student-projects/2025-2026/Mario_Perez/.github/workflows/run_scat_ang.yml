@@ -1,0 +1,33 @@
+name: Run Scattering Angle Program
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:        # lets you run it manually from GitHub too
+
+jobs:
+  run-scat-ang:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install numpy scipy matplotlib  # adjust to what your script needs
+
+      - name: Run scat_ang program
+        run: python scat_ang_CM_for_diatomics.py
+
+      - name: Upload output
+        uses: actions/upload-artifact@v3
+        with:
+          name: scattering-output
+          path: output/               # uploads your output folder so you can download results
