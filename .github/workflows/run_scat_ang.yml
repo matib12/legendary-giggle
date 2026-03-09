@@ -1,0 +1,42 @@
+name: Run Scattering Angle Program
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      displacement:
+        description: 'Initial displacement of atoms in Angstrom'
+        required: true
+        default: '5'
+      kinetic_energy:
+        description: 'Initial kinetic energy in eV'
+        required: true
+        default: '2'
+
+jobs:
+  run-scat-ang:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install numpy scipy matplotlib
+
+      - name: Run scat_ang program
+        run: |
+          printf '\n${{ github.event.inputs.displacement }}\n${{ github.event.inputs.kinetic_energy }}\n' | python scat_ang_CM_for_diatomics.py
+
+      - name: Upload output
+        uses: actions/upload-artifact@v3
+        with:
+          name: scattering-output
+          path: output/
