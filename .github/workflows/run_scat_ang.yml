@@ -2,7 +2,7 @@ name: Run Scattering Angle Program
 
 on:
   push:
-    branches: [main]
+    branches: [Mario_Perez]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,22 +21,26 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5           # updated from v3 → v5
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5       # updated from v4 → v5
         with:
-          python-version: '3.11'
+          python-version: '3.x'             # always uses latest stable Python 3
+          cache: 'pip'                       # caches dependencies for faster runs
 
       - name: Install dependencies
-        run: pip install numpy scipy matplotlib
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy scipy matplotlib
 
       - name: Run scat_ang program
         run: |
           printf '\n${{ github.event.inputs.displacement }}\n${{ github.event.inputs.kinetic_energy }}\n' | python scat_ang_CM_for_diatomics.py
 
       - name: Upload output
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4    # updated from v3 → v4
         with:
           name: scattering-output
           path: output/
+        if: ${{ always() }}                 # uploads output even if the run fails
