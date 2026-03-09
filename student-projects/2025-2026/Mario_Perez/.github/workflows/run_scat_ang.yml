@@ -4,7 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:        # lets you run it manually from GitHub too
+  workflow_dispatch:
+    inputs:
+      displacement:
+        description: 'Initial displacement of atoms in Angstrom'
+        required: true
+        default: '5'
+      kinetic_energy:
+        description: 'Initial kinetic energy in eV'
+        required: true
+        default: '2'
 
 jobs:
   run-scat-ang:
@@ -20,14 +29,14 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install numpy scipy matplotlib  # adjust to what your script needs
+        run: pip install numpy scipy matplotlib
 
       - name: Run scat_ang program
-        run: python scat_ang_CM_for_diatomics.py
+        run: |
+          printf '\n${{ github.event.inputs.displacement }}\n${{ github.event.inputs.kinetic_energy }}\n' | python scat_ang_CM_for_diatomics.py
 
       - name: Upload output
         uses: actions/upload-artifact@v3
         with:
           name: scattering-output
-          path: output/               # uploads your output folder so you can download results
+          path: output/
