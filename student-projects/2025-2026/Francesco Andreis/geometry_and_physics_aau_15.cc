@@ -52,9 +52,9 @@ double funcl(double x1, double x2, double x3, double x4, double x5){
 }
 
 TVector3 ToBeamFrame(const TVector3& v,
-																					const TVector3& ex,
-																					const TVector3& ey,
-																					const TVector3& ez)
+	const TVector3& ex,
+	const TVector3& ey,
+	const TVector3& ez)
 {
 	return TVector3(v.Dot(ex), v.Dot(ey), v.Dot(ez));
 }
@@ -70,10 +70,10 @@ struct HitData {
 };
 
 HitData ProcessDetectorHit(
-																											TVector3 vhp, TVector3 vCenter, TGeoRotation* rot,
-																											int numStrips, double step, TRandom3* ran,
-																											TVector3 beamOrigin, TVector3 ex_beam, TVector3 ey_beam, TVector3 ez_beam,
-																											double normalY, double directionSignX)
+	TVector3 vhp, TVector3 vCenter, TGeoRotation* rot,
+	int numStrips, double step, TRandom3* ran,
+	TVector3 beamOrigin, TVector3 ex_beam, TVector3 ey_beam, TVector3 ez_beam,
+	double normalY, double directionSignX)
 {
 	HitData result;
 	double deg = 180. / TMath::Pi();
